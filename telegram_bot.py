@@ -23,10 +23,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info(f"User {user.full_name} (ID: {user.id}) started the bot. Chat ID: {chat_id}")
     
     message = (
-        f"👋 **Welcome to UniShark Bot, {user.first_name}!** 🦈\n\n"
+        f"<b>👋 Welcome to UniShark Bot, {user.first_name}!</b> 🦈\n\n"
         "I'm here to help you stay on top of your university tasks. Here is your unique ID to connect me to your account:\n\n"
-        f"🔑 Your Personal Chat ID is: `{chat_id}`\n\n"
-        "**Action Required:**\n"
+        f"🔑 <b>Your Personal Chat ID is:</b> <code>{chat_id}</code>\n\n"
+        "<b>Action Required:</b>\n"
         "1️⃣ Copy the Chat ID above.\n"
         "2️⃣ Go to your UniShark settings page.\n"
         "3️⃣ Paste the ID into the 'Telegram Chat ID' field.\n\n"
@@ -52,7 +52,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handle regular text messages."""
     message_text = update.message.text
     
-    if "كسمك"  in message_text:
+    if "كسمك" in message_text:
         await update.message.reply_text("الله يسامحك")
     elif "حرفوش" in message_text:
         await update.message.reply_text("حرفوش عمك")

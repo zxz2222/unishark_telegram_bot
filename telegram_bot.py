@@ -1,5 +1,7 @@
 import os
 import logging
+import asyncio
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -7,6 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# --- Standard Bot Setup ---
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -57,23 +60,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif "حرفوش" in message_text:
         await update.message.reply_text("حرفوش عمك")
 
-def main() -> None:
-    """Start the bot."""
-    if not TELEGRAM_BOT_TOKEN:
-        logger.error("TELEGRAM_BOT_TOKEN is not set. The bot cannot start.")
-        return
+# --- Web Service Integration ---
 
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+# Initialize the bot application
+application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # on different commands - answer in Telegram
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# Initialize the Flask app
+app = Flask(__name__)
 
-    # Run the bot until the user presses Ctrl-C
-    logger.info("Bot is starting...")
-    application.run_polling()
-    logger.info("Bot has stopped.")
+@app.route("/telegram", methods=["POST"])
+async def telegram_webhook():
+    """This is the endpoint Telegram sends updates to."""
+    update_data = request.get_json()
+    update = Update.de_json(update_data, application.bot)
+    await application.process_update(update)
+    return "OK", 200
 
-if __name__ == "__main__":
-    main()
+@app.route("/health")
+def health_check():
+    """This is the endpoint for the uptime monitor to ping."""
+    return "OK", 200
+
+# The main part of the original script is no longer needed,
+# as the web server will handle running the bot.
+# if __name__ == "__main__":
+#     application.run_polling()

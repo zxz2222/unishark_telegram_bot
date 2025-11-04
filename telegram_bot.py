@@ -1,7 +1,5 @@
 import os
 import logging
-import asyncio
-from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -9,7 +7,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# --- Standard Bot Setup ---
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -17,6 +14,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+PORT = int(os.getenv("PORT", 8443))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., https://your-deployment-url.com/
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a message when the command /start is issued."""
@@ -55,35 +54,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handle regular text messages."""
     message_text = update.message.text
     
-    if "كسمك" in message_text:
+    if message_text == "كسمك":
         await update.message.reply_text("الله يسامحك")
     elif "حرفوش" in message_text:
         await update.message.reply_text("حرفوش عمك")
 
-# --- Web Service Integration ---
+def main() -> None:
+    """Start the bot."""
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN is not set. The bot cannot start.")
+        return
 
-# Initialize the bot application
-application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-# Initialize the Flask app
-app = Flask(__name__)
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-@app.route("/telegram", methods=["POST"])
-async def telegram_webhook():
-    """This is the endpoint Telegram sends updates to."""
-    update_data = request.get_json()
-    update = Update.de_json(update_data, application.bot)
-    await application.process_update(update)
-    return "OK", 200
+    # Run the bot with automatic restart on failure
+    while True:
+        try:
+            if WEBHOOK_URL:
+                logger.info("Starting bot with webhooks...")
+                application.run_webhook(
+                    listen="0.0.0.0",
+                    port=PORT,
+                    url_path=TELEGRAM_BOT_TOKEN,
+                    webhook_url=WEBHOOK_URL + TELEGRAM_BOT_TOKEN
+                )
+            else:
+                logger.info("Starting bot with polling...")
+                application.run_polling()
+        except Exception as e:
+            logger.error(f"Bot encountered an error: {e}. Restarting...")
 
-@app.route("/health")
-def health_check():
-    """This is the endpoint for the uptime monitor to ping."""
-    return "OK", 200
-
-# The main part of the original script is no longer needed,
-# as the web server will handle running the bot.
-# if __name__ == "__main__":
-#     application.run_polling()
+if __name__ == "__main__":
+    main()

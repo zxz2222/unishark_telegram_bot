@@ -72,22 +72,19 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Run the bot with automatic restart on failure
-    while True:
-        try:
-            if WEBHOOK_URL:
-                logger.info("Starting bot with webhooks...")
-                application.run_webhook(
-                    listen="0.0.0.0",
-                    port=PORT,
-                    url_path=TELEGRAM_BOT_TOKEN,
-                    webhook_url=WEBHOOK_URL + TELEGRAM_BOT_TOKEN
-                )
-            else:
-                logger.info("Starting bot with polling...")
-                application.run_polling()
-        except Exception as e:
-            logger.error(f"Bot encountered an error: {e}. Restarting...")
+    logger.info("Bot is starting...")
+    if WEBHOOK_URL:
+        logger.info("Starting bot with webhooks...")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=TELEGRAM_BOT_TOKEN,
+            webhook_url=WEBHOOK_URL + TELEGRAM_BOT_TOKEN
+        )
+    else:
+        logger.info("Starting bot with polling...")
+        application.run_polling()
+    logger.info("Bot has stopped.")
 
 if __name__ == "__main__":
     main()

@@ -1,8 +1,10 @@
 import os
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
+from aiohttp import web
 
 # Load environment variables from .env file
 load_dotenv()
@@ -14,8 +16,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-PORT = int(os.getenv("PORT", 8443))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # e.g., https://your-deployment-url.com/
+PORT = int(os.getenv("PORT", 8000))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a message when the command /start is issued."""
@@ -59,32 +61,97 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif "حرفوش" in message_text:
         await update.message.reply_text("حرفوش عمك")
 
+async def health_check(request):
+    """Health check endpoint for Choreo"""
+    return web.Response(text='OK\n', status=200)
+
+async def run_bot_with_health_check():
+    """Run bot with webhook and health check"""
+    logger.info(f"Initializing bot on port {PORT}...")
+    
+    # Create application
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Initialize the application
+    await application.initialize()
+    await application.start()
+    
+    # Set up webhook
+    webhook_path = f"/{TELEGRAM_BOT_TOKEN}"
+    webhook_url = WEBHOOK_URL + TELEGRAM_BOT_TOKEN
+    
+    logger.info(f"Setting webhook to: {webhook_url}")
+    await application.bot.set_webhook(
+        url=webhook_url,
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
+    
+    # Create web app with routes
+    web_app = web.Application()
+    
+    # Health check endpoints
+    web_app.router.add_get('/', health_check)
+    web_app.router.add_get('/health', health_check)
+    
+    # Webhook endpoint
+    async def telegram_webhook(request):
+        """Handle Telegram webhook POST requests"""
+        try:
+            data = await request.json()
+            update = Update.de_json(data, application.bot)
+            await application.update_queue.put(update)
+            return web.Response(status=200)
+        except Exception as e:
+            logger.error(f"Error processing webhook: {e}")
+            return web.Response(status=500)
+    
+    web_app.router.add_post(webhook_path, telegram_webhook)
+    
+    # Start web server
+    runner = web.AppRunner(web_app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', PORT)
+    await site.start()
+    
+    logger.info(f"✅ Bot is running!")
+    logger.info(f"   - Webhook: {webhook_url}")
+    logger.info(f"   - Health check: http://0.0.0.0:{PORT}/health")
+    logger.info(f"   - Listening on: 0.0.0.0:{PORT}")
+    
+    # Process updates
+    async with application:
+        await application.updater.start_webhook(
+            listen='0.0.0.0',
+            port=PORT,
+            url_path=TELEGRAM_BOT_TOKEN,
+            webhook_url=webhook_url
+        )
+        
+        # Keep running
+        stop_event = asyncio.Event()
+        await stop_event.wait()
+
 def main() -> None:
     """Start the bot."""
     if not TELEGRAM_BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN is not set. The bot cannot start.")
         return
+    
+    if not WEBHOOK_URL:
+        logger.error("WEBHOOK_URL is not set. Webhook mode requires this.")
+        return
 
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    logger.info("Bot is starting...")
-    if WEBHOOK_URL:
-        logger.info("Starting bot with webhooks...")
-        application.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=TELEGRAM_BOT_TOKEN,
-            webhook_url=WEBHOOK_URL + TELEGRAM_BOT_TOKEN
-        )
-    else:
-        logger.info("Starting bot with polling...")
-        application.run_polling()
-    logger.info("Bot has stopped.")
+    try:
+        asyncio.run(run_bot_with_health_check())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()

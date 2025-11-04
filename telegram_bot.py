@@ -66,7 +66,7 @@ async def health_check(request):
     return web.Response(text='OK\n', status=200)
 
 async def run_bot_with_health_check():
-    """Run bot with webhook and health check"""
+    """Run bot with webhook and health check on single port"""
     logger.info(f"Initializing bot on port {PORT}...")
     
     # Create application
@@ -98,7 +98,7 @@ async def run_bot_with_health_check():
     web_app.router.add_get('/', health_check)
     web_app.router.add_get('/health', health_check)
     
-    # Webhook endpoint
+    # Webhook endpoint - handle Telegram updates
     async def telegram_webhook(request):
         """Handle Telegram webhook POST requests"""
         try:
@@ -107,7 +107,7 @@ async def run_bot_with_health_check():
             await application.update_queue.put(update)
             return web.Response(status=200)
         except Exception as e:
-            logger.error(f"Error processing webhook: {e}")
+            logger.error(f"Error processing webhook: {e}", exc_info=True)
             return web.Response(status=500)
     
     web_app.router.add_post(webhook_path, telegram_webhook)
@@ -123,18 +123,13 @@ async def run_bot_with_health_check():
     logger.info(f"   - Health check: http://0.0.0.0:{PORT}/health")
     logger.info(f"   - Listening on: 0.0.0.0:{PORT}")
     
-    # Process updates
-    async with application:
-        await application.updater.start_webhook(
-            listen='0.0.0.0',
-            port=PORT,
-            url_path=TELEGRAM_BOT_TOKEN,
-            webhook_url=webhook_url
-        )
-        
-        # Keep running
-        stop_event = asyncio.Event()
-        await stop_event.wait()
+    # Keep the application running to process updates from the queue
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await application.stop()
+        await application.shutdown()
+        await runner.cleanup()
 
 def main() -> None:
     """Start the bot."""

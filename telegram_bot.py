@@ -67,6 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def health_check(request):
     """Health check endpoint for Choreo"""
+    logger.debug("Health check pinged")
     return web.Response(text='OK\n', status=200)
 
 async def run_bot_with_health_check():
@@ -122,9 +123,11 @@ async def run_bot_with_health_check():
     async def telegram_webhook(request):
         """Handle Telegram webhook POST requests"""
         try:
+            logger.info("Received webhook POST request")
             data = await request.json()
             update = Update.de_json(data, application.bot)
             await application.update_queue.put(update)
+            logger.info(f"Update queued successfully: {update.update_id}")
             return web.Response(status=200)
         except Exception as e:
             logger.error(f"Error processing webhook: {e}", exc_info=True)
@@ -149,10 +152,28 @@ async def run_bot_with_health_check():
     logger.info(f"   - Listening on: 0.0.0.0:{PORT}")
     logger.info("Bot will stay alive indefinitely. Press Ctrl+C to stop.")
     
+    # Log a heartbeat every 5 minutes to confirm bot is still alive
+    async def heartbeat():
+        while True:
+            await asyncio.sleep(300)  # 5 minutes
+            logger.info("💓 Heartbeat: Bot is still running")
+            # Ping ourselves to prevent idle timeout
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(f'http://localhost:{PORT}/health', timeout=5) as resp:
+                        if resp.status == 200:
+                            logger.debug("Self-ping successful")
+            except Exception as e:
+                logger.warning(f"Self-ping failed: {e}")
+    
+    heartbeat_task = asyncio.create_task(heartbeat())
+    
     # Keep the application running to process updates from the queue
     try:
         await asyncio.Event().wait()
     finally:
+        heartbeat_task.cancel()
         await application.stop()
         await application.shutdown()
         await runner.cleanup()

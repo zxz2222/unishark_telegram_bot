@@ -5,12 +5,12 @@ on:
   push:
     branches: [main]  # Auto-start on push to main
   schedule:
-    - cron: '0 */12 * * *'  # Restart every 12 hours (safety net)
+    - cron: '0 */5 * * *'  # Restart every 5 hours (before 6-hour limit)
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 35000  # Maximum GitHub allows (~24 days)
+    timeout-minutes: 350  # 5 hours 50 minutes (safety margin before 6-hour limit)
     
     steps:
       - name: Checkout repository
@@ -35,4 +35,15 @@ jobs:
         run: |
           echo "Starting UniShark Telegram Bot..."
           echo "Mode: Polling (GitHub Actions)"
-          python -u telegram_bot.py
+          echo "Will run for 5h50m before auto-restart"
+          
+          # Verify token is set
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "❌ Error: TELEGRAM_BOT_TOKEN secret is not set!"
+            echo "Please add it in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          
+          echo "✅ Token configured"
+          echo "✅ Starting bot..."
+          python telegram_bot.py

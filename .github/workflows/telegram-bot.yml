@@ -35,4 +35,4 @@ jobs:
         run: |
           echo "Starting UniShark Telegram Bot..."
           echo "Mode: Polling (GitHub Actions)"
-          python bot.py
+          python -u telegram_bot.py

@@ -1,0 +1,38 @@
+name: UniShark Telegram Bot 24/7
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches: [main]  # Auto-start on push to main
+  schedule:
+    - cron: '0 */12 * * *'  # Restart every 12 hours (safety net)
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35000  # Maximum GitHub allows (~24 days)
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run Telegram Bot (Polling Mode)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          PORT: 8000
+          # WEBHOOK_URL is intentionally not set - bot will use polling mode
+        run: |
+          echo "Starting UniShark Telegram Bot..."
+          echo "Mode: Polling (GitHub Actions)"
+          python bot.py
